@@ -1,22 +1,28 @@
 const { TableClient } = require("@azure/data-tables");
+const signalR = require("@microsoft/signalr");
+const axios = require('axios');
 
 module.exports = async function (context, req) {
     context.log('JavaScript HTTP trigger function processed a request.');
 
     const connectionString = process.env.AzureWebJobsStorage;
-    const tableName = 'CounterTable';
+    const tableName = 'counter';
     const partitionKey = '1';
     const rowKey = '1';
 
+    // SignalR configuration
+    const signalRConnectionString = process.env.AzureSignalRConnectionString; // SignalR service connection string
+    const hubBaseUrl = process.env.AzureSignalRHubUrl; // Base URL of your SignalR service without https:// prefix
+
     try {
-        console.log("connectionString: " + connectionString);
+        console.log("Connection string: " + connectionString);
 
         // Create a TableClient object
         const tableClient = TableClient.fromConnectionString(connectionString, tableName);
 
         // Retrieve the entity
         let entity = await tableClient.getEntity(partitionKey, rowKey);
-        
+
         // Custom replacer function to handle BigInt
         const replacer = (key, value) => {
             return typeof value === 'bigint' ? value.toString() : value;
@@ -31,6 +37,35 @@ module.exports = async function (context, req) {
 
         // Update the entity
         await tableClient.updateEntity(entity, "Merge");
+
+        // Generate a valid access token for the SignalR connection
+        const negotiateUrl = `https://${hubBaseUrl}/api/negotiate?hub=counterHub`;
+        const response = await axios.post(negotiateUrl, null, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${signalRConnectionString}` // Use Authorization header for access key
+            }
+        });
+
+        const { url, accessToken } = response.data;
+
+        // Create a SignalR connection
+        const hubUrl = `https://${hubBaseUrl}/client/?hub=counterHub`;
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl(hubUrl, {
+                accessTokenFactory: () => accessToken
+            })
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        // Start the connection
+        await connection.start();
+
+        // Broadcast a message to all clients
+        await connection.invoke("SendMessage", "counterUpdated", entity.counter.toString());
+
+        // Stop the connection
+        await connection.stop();
 
         context.res = {
             status: 200,

@@ -7,8 +7,7 @@ export default function App() {
   
   
   const increaseCounter = () => {
-    //fetch("https://increasecounter.azurewebsites.net/api/IncreaseCounter?", {
-    fetch("http://localhost:7072/api/IncreaseCounter",{
+    fetch("https://counterfun.azurewebsites.net/api/IncreaseCounter?", {
       method: 'POST',
       headers: {
           'Content-Type': 'application/json',

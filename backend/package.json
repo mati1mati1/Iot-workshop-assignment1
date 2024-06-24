@@ -7,6 +7,10 @@
     "test": "echo \"No tests yet...\""
   },
   "dependencies": {
-    "@azure/data-tables": "^13.2.2"
+    "@azure/data-tables": "^13.2.2",
+    "@azure/identity": "^4.3.0",
+    "@microsoft/signalr": "^8.0.0",
+    "axios": "^1.7.2",
+    "express": "^4.19.2"
   }
 }
