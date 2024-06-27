@@ -5,15 +5,20 @@
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "methods": [
-        "get",
-        "post"
-      ]
+      "methods": ["get", "post"]
     },
     {
       "type": "http",
       "direction": "out",
       "name": "res"
+    },
+    {
+      "name": "signalIotHw2",
+      "type": "signalR",
+      "direction": "out",
+      "hubName": "CounterUpdate",
+      "connectionStringSetting": "AzureSignalRConnectionString"
     }
-  ]
+  ],
+  "scriptFile": "index.js"
 }

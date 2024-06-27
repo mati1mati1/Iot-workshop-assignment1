@@ -1,81 +1,42 @@
 const { TableClient } = require("@azure/data-tables");
-const signalR = require("@microsoft/signalr");
-const axios = require('axios');
 
 module.exports = async function (context, req) {
-    context.log('JavaScript HTTP trigger function processed a request.');
+  context.log('JavaScript HTTP trigger function processed a request.');
 
-    const connectionString = process.env.AzureWebJobsStorage;
-    const tableName = 'counter';
-    const partitionKey = '1';
-    const rowKey = '1';
+  const connectionString = process.env.AzureWebJobsStorage;
+  const tableName = 'counter';
+  const partitionKey = '1';
+  const rowKey = '1';
 
-    // SignalR configuration
-    const signalRConnectionString = process.env.AzureSignalRConnectionString; // SignalR service connection string
-    const hubBaseUrl = process.env.AzureSignalRHubUrl; // Base URL of your SignalR service without https:// prefix
+  try {
+    // Create a TableClient object
+    const tableClient = TableClient.fromConnectionString(connectionString, tableName);
 
-    try {
-        console.log("Connection string: " + connectionString);
+    // Retrieve the entity
+    let entity = await tableClient.getEntity(partitionKey, rowKey);
 
-        // Create a TableClient object
-        const tableClient = TableClient.fromConnectionString(connectionString, tableName);
+    // Increment the counter value
+    entity.counter = BigInt(entity.counter) + 1n;
 
-        // Retrieve the entity
-        let entity = await tableClient.getEntity(partitionKey, rowKey);
+    // Update the entity
+    await tableClient.updateEntity(entity, "Merge");
 
-        // Custom replacer function to handle BigInt
-        const replacer = (key, value) => {
-            return typeof value === 'bigint' ? value.toString() : value;
-        };
+    // Send message to SignalR
+    const message = `${entity.counter}`;
+    context.bindings.signalIotHw2 = [{
+      'target': 'newMessage',
+      'arguments': [message]
+    }];
 
-        context.log('Entity:', JSON.stringify(entity, replacer, 2)); // Pretty print the entity
-
-        // Increment the counter value
-        entity.counter = BigInt(entity.counter) + 1n;
-
-        context.log('Updated Entity:', JSON.stringify(entity, replacer, 2));
-
-        // Update the entity
-        await tableClient.updateEntity(entity, "Merge");
-
-        // Generate a valid access token for the SignalR connection
-        const negotiateUrl = `https://${hubBaseUrl}/api/negotiate?hub=counterHub`;
-        const response = await axios.post(negotiateUrl, null, {
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${signalRConnectionString}` // Use Authorization header for access key
-            }
-        });
-
-        const { url, accessToken } = response.data;
-
-        // Create a SignalR connection
-        const hubUrl = `https://${hubBaseUrl}/client/?hub=counterHub`;
-        const connection = new signalR.HubConnectionBuilder()
-            .withUrl(hubUrl, {
-                accessTokenFactory: () => accessToken
-            })
-            .configureLogging(signalR.LogLevel.Information)
-            .build();
-
-        // Start the connection
-        await connection.start();
-
-        // Broadcast a message to all clients
-        await connection.invoke("SendMessage", "counterUpdated", entity.counter.toString());
-
-        // Stop the connection
-        await connection.stop();
-
-        context.res = {
-            status: 200,
-            body: `Counter value incremented to: ${entity.counter}`
-        };
-    } catch (error) {
-        context.log.error(`Error incrementing counter value: ${error.message}`);
-        context.res = {
-            status: 500,
-            body: `Error incrementing counter value: ${error.message}`
-        };
-    }
+    context.res = {
+      status: 200,
+      body: `${entity.counter}`
+    };
+  } catch (error) {
+    context.log.error(`Error incrementing counter value: ${error.message}`);
+    context.res = {
+      status: 500,
+      body: `Error incrementing counter value: ${error.message}`
+    };
+  }
 };
